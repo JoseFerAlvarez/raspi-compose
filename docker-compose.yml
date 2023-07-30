@@ -1,0 +1,168 @@
+version: "3"
+
+services:
+
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "80:80/tcp"
+    environment:
+      TZ: '${TIMEZONE}'
+      WEBPASSWORD: '${PIHOLE_PASS}'
+    volumes:
+      - '${PIHOLE_ROUTE}/etc-pihole:/etc/pihole'
+      - '${PIHOLE_ROUTE}/etc-dnsmasq:/etc/dnsmasq.d'
+
+  photoprism:
+    image: photoprism/photoprism:arm64
+    container_name: photoprism
+    restart: unless-stopped
+    stop_grace_period: 10s
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    ports:
+      - "2342:2342" # HTTP port (host:container)
+    environment:
+      PHOTOPRISM_ADMIN_USER: "${PHOTOPRISM_USER}"                     # admin login username
+      PHOTOPRISM_ADMIN_PASSWORD: "${PHOTOPRISM_PASS}"                 # initial admin password (8-72 characters)
+      PHOTOPRISM_AUTH_MODE: "password"                                # authentication mode (public, password)
+      PHOTOPRISM_SITE_URL: "${PHOTOPRISM_URL}"                        # server URL in the format "http(s)://domain.name(:port)/(path)"
+      PHOTOPRISM_DISABLE_TLS: "false"                                 # disables HTTPS/TLS even if the site URL starts with https:// and a certificate is available
+      PHOTOPRISM_DEFAULT_TLS: "true"                                  # defaults to a self-signed HTTPS/TLS certificate if no other certificate is available
+      PHOTOPRISM_ORIGINALS_LIMIT: 5000                                # file size limit for originals in MB (increase for high-res video)
+      PHOTOPRISM_HTTP_COMPRESSION: "none"                             # improves transfer speed and bandwidth utilization (none or gzip)
+      PHOTOPRISM_WORKERS: 1                                           # limits the number of indexing workers to reduce system load
+      PHOTOPRISM_LOG_LEVEL: "info"                                    # log level: trace, debug, info, warning, error, fatal, or panic
+      PHOTOPRISM_READONLY: "false"                                    # do not modify originals directory (reduced functionality)
+      PHOTOPRISM_EXPERIMENTAL: "false"                                # enables experimental features
+      PHOTOPRISM_DISABLE_CHOWN: "false"                               # disables updating storage permissions via chmod and chown on startup
+      PHOTOPRISM_DISABLE_WEBDAV: "false"                              # disables built-in WebDAV server
+      PHOTOPRISM_DISABLE_SETTINGS: "false"                            # disables Settings in Web UI
+      PHOTOPRISM_DISABLE_TENSORFLOW: "true"                           # disables all features depending on TensorFlow
+      PHOTOPRISM_DISABLE_FACES: "true"                                # disables face detection and recognition (requires TensorFlow)
+      PHOTOPRISM_DISABLE_CLASSIFICATION: "true"                       # disables image classification (requires TensorFlow)
+      PHOTOPRISM_DISABLE_VECTORS: "false"                             # disables vector graphics support
+      PHOTOPRISM_DISABLE_RAW: "false"                                 # disables indexing and conversion of RAW images
+      PHOTOPRISM_RAW_PRESETS: "false"                                 # enables applying user presets when converting RAW images (reduces performance)
+      PHOTOPRISM_JPEG_QUALITY: 100                                    # a higher value increases the quality and file size of JPEG images and thumbnails (25-100)
+      PHOTOPRISM_DETECT_NSFW: "false"                                 # automatically flags photos as private that MAY be offensive (requires TensorFlow)
+      PHOTOPRISM_UPLOAD_NSFW: "true"                                  # allow uploads that MAY be offensive
+      PHOTOPRISM_DATABASE_DRIVER: "sqlite"                            # SQLite is an embedded database that doesn't require a server
+      PHOTOPRISM_DATABASE_NAME: "${PHOTOPRISM_DATABASE_NAME}"         # MariaDB or MySQL database schema name
+      PHOTOPRISM_DATABASE_USER: "${PHOTOPRISM_DATABASE_USER}"         # MariaDB or MySQL database user name
+      PHOTOPRISM_DATABASE_PASSWORD: "${PHOTOPRISM_DATABASE_PASSWORD}" # MariaDB or MySQL database user password
+      PHOTOPRISM_SITE_CAPTION: "Photoprism"
+      PHOTOPRISM_SITE_DESCRIPTION: ""                # meta site description
+      PHOTOPRISM_SITE_AUTHOR: ""                     # meta site author
+      ## Run/install on first startup (options: update, gpu, tensorflow, davfs, clean):
+      # PHOTOPRISM_INIT: "update clean"
+      ## Hardware Video Transcoding:
+      PHOTOPRISM_FFMPEG_ENCODER: "raspberry"       # FFmpeg encoder ("software", "intel", "nvidia", "apple", "raspberry")
+      # PHOTOPRISM_FFMPEG_BITRATE: "32"              # FFmpeg encoding bitrate limit in Mbit/s (default: 50)
+      # PHOTOPRISM_FFMPEG_RESOLUTION: "1920"         # FFmpeg encoding resolution limit in pixel height (default: 4096)
+    working_dir: "/photoprism" # do not change or remove
+    volumes:
+      - "${PHOTOPRISM_ROUTE}/pictures:/photoprism/originals"
+      - "${PHOTOPRISM_ROUTE}/storage:/photoprism/storage"
+
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:arm64v8-latest
+    container_name: calibre
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TIMEZONE}
+      - DOCKER_MODS=linuxserver/mods:universal-calibre #optional
+    volumes:
+      - ${CALIBRE_ROUTE}/data:/config
+      - ${CALIBRE_ROUTE}/books:/books
+    ports:
+      - 8083:8083
+
+  plex:
+    image: lscr.io/linuxserver/plex:arm64v8-latest
+    container_name: plex
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    expose:
+      - 32400
+      - 33400
+    ports:
+      - 32400:32400
+      - 33400:33400
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=1000
+      - PGID=1000
+      - VERSION=docker
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - ${PLEX_ROUTE}/data:/config
+      - ${PLEX_ROUTE}/series:/tv
+      - ${PLEX_ROUTE}/pelis:/movies
+      - ${PLEX_ROUTE}/courses:/courses
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:arm64v8-latest
+    container_name: transmission
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TIMEZONE}
+      - TRANSMISSION_WEB_HOME= #optional
+      - USER=${TRANSMISSION_USER}
+      - PASS=${TRANSMISSION_PASS}
+      - WHITELIST= #optional
+      - PEERPORT= #optional
+      - HOST_WHITELIST= #optional
+    volumes:
+      - ${TRANSMISSION_ROUTE}/data:/config
+      - ${TRANSMISSION_ROUTE}/downloads:/downloads
+      - ${TRANSMISSION_ROUTE}/watch:/watch
+    ports:
+      - 9091:9091
+      - 51413:51413
+      - 51413:51413/udp
+
+  flexget:
+    image: wiserain/flexget:latest
+    container_name: flexget
+    restart: unless-stopped
+    volumes:
+      - ${FLEXGET_ROUTE}:/config
+      - ${FLEXGET_ROUTE}/custom-cont-init.d:/custom-cont-init.d
+      - ${TRANSMISSION_ROUTE}/downloads:/downloads
+      - ${PLEX_ROUTE}:/storage
+    ports:
+      - 5050:5050
+    environment:
+      - PUID=1001
+      - PGID=1001
+      - TORRENT_PLUGIN=transmission
+      - FG_WEBUI_PASSWD=${FLEXGET_PASS}
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_SCHEDULE: "0 0 1 * * *"
+      WATCHTOWER_CLEANUP: "true"
+      TZ: ${TIMEZONE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
