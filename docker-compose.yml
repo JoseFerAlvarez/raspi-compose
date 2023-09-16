@@ -2,6 +2,19 @@ version: "3"
 
 services:
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - '${PORTAINER_LOCALTIME}:/etc/localtime:ro'
+      - '${PORTAINER_SOCKET}:/var/run/docker.sock:ro;'
+      - '${PORTAINER_ROUTE}:/data'
+    ports:
+      - 9000:9000
+
   pihole:
     image: pihole/pihole:latest
     container_name: pihole
